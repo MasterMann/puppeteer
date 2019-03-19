@@ -248,19 +248,20 @@ how to run this Dockerfile from a webserver running on App Engine Flex (Node).
 
 ### Running on Alpine
 
-The [newest Chromium package](https://pkgs.alpinelinux.org/package/edge/community/x86_64/chromium) supported on Alpine is 68, which was corresponding to [Puppeteer v1.4.0](https://github.com/GoogleChrome/puppeteer/releases/tag/v1.4.0).
+The [newest Chromium package](https://pkgs.alpinelinux.org/package/edge/community/x86_64/chromium) supported on Alpine is 71, which was corresponding to [Puppeteer v1.9.0](https://github.com/GoogleChrome/puppeteer/releases/tag/v1.9.0).
 
 Example Dockerfile:
 
 ```Dockerfile
-FROM node:9-alpine
+FROM node:10-alpine
 
-# Installs latest Chromium (68) package.
+# Installs latest Chromium (71) package.
 RUN apk update && apk upgrade && \
     echo @edge http://nl.alpinelinux.org/alpine/edge/community >> /etc/apk/repositories && \
     echo @edge http://nl.alpinelinux.org/alpine/edge/main >> /etc/apk/repositories && \
     apk add --no-cache \
       chromium@edge \
+      harfbuzz@edge \
       nss@edge
 
 ...
@@ -268,8 +269,8 @@ RUN apk update && apk upgrade && \
 # Tell Puppeteer to skip installing Chrome. We'll be using the installed package.
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD true
 
-# Puppeteer v1.4.0 works with Chromium 68.
-RUN yarn add puppeteer@1.4.0
+# Puppeteer v1.9.0 works with Chromium 71.
+RUN yarn add puppeteer@1.9.0
 
 # Add user so we don't need --no-sandbox.
 RUN addgroup -S pptruser && adduser -S -g pptruser pptruser \
@@ -346,9 +347,8 @@ There's also another [simple guide](https://timleland.com/headless-chrome-on-her
 
 AWS Lambda [limits](https://docs.aws.amazon.com/lambda/latest/dg/limits.html) deployment package sizes to ~50MB. This presents challenges for running headless Chrome (and therefore Puppeteer) on Lambda. The community has put together a few resources that work around the issues:
 
-- https://github.com/adieuadieu/serverless-chrome/blob/master/docs/chrome.md (tracks the latest Chromium snapshots)
 - https://github.com/alixaxel/chrome-aws-lambda (kept updated with the latest stable release of puppeteer)
-- https://github.com/Kikobeats/aws-lambda-chrome
+- https://github.com/adieuadieu/serverless-chrome/blob/master/docs/chrome.md (serverless plugin - outdated)
 
 ## Code Transpilation Issues
 

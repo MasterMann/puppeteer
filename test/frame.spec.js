@@ -18,7 +18,7 @@ const utils = require('./utils');
 
 module.exports.addTests = function({testRunner, expect}) {
   const {describe, xdescribe, fdescribe} = testRunner;
-  const {it, fit, xit} = testRunner;
+  const {it, fit, xit, it_fails_ffox} = testRunner;
   const {beforeAll, beforeEach, afterAll, afterEach} = testRunner;
 
   describe('Frame.executionContext', function() {
@@ -57,10 +57,26 @@ module.exports.addTests = function({testRunner, expect}) {
     });
   });
 
+  describe('Frame.evaluate', function() {
+    it_fails_ffox('should throw for detached frames', async({page, server}) => {
+      const frame1 = await utils.attachFrame(page, 'frame1', server.EMPTY_PAGE);
+      await utils.detachFrame(page, 'frame1');
+      let error = null;
+      await frame1.evaluate(() => 7 * 8).catch(e => error = e);
+      expect(error.message).toContain('Execution Context is not available in detached frame');
+    });
+  });
+
   describe('Frame Management', function() {
     it('should handle nested frames', async({page, server}) => {
       await page.goto(server.PREFIX + '/frames/nested-frames.html');
-      expect(utils.dumpFrames(page.mainFrame())).toBeGolden('nested-frames.txt');
+      expect(utils.dumpFrames(page.mainFrame())).toEqual([
+        'http://localhost:<PORT>/frames/nested-frames.html',
+        '    http://localhost:<PORT>/frames/two-frames.html (2frames)',
+        '        http://localhost:<PORT>/frames/frame.html (uno)',
+        '        http://localhost:<PORT>/frames/frame.html (dos)',
+        '    http://localhost:<PORT>/frames/frame.html (aframe)'
+      ]);
     });
     it('should send events when frames are manipulated dynamically', async({page, server}) => {
       await page.goto(server.EMPTY_PAGE);
@@ -126,6 +142,37 @@ module.exports.addTests = function({testRunner, expect}) {
       expect(detachedFrames.length).toBe(4);
       expect(navigatedFrames.length).toBe(1);
     });
+    it('should support framesets', async({page, server}) => {
+      let attachedFrames = [];
+      let detachedFrames = [];
+      let navigatedFrames = [];
+      page.on('frameattached', frame => attachedFrames.push(frame));
+      page.on('framedetached', frame => detachedFrames.push(frame));
+      page.on('framenavigated', frame => navigatedFrames.push(frame));
+      await page.goto(server.PREFIX + '/frames/frameset.html');
+      expect(attachedFrames.length).toBe(4);
+      expect(detachedFrames.length).toBe(0);
+      expect(navigatedFrames.length).toBe(5);
+
+      attachedFrames = [];
+      detachedFrames = [];
+      navigatedFrames = [];
+      await page.goto(server.EMPTY_PAGE);
+      expect(attachedFrames.length).toBe(0);
+      expect(detachedFrames.length).toBe(4);
+      expect(navigatedFrames.length).toBe(1);
+    });
+    it('should report frame from-inside shadow DOM', async({page, server}) => {
+      await page.goto(server.PREFIX + '/shadow.html');
+      await page.evaluate(async url => {
+        const frame = document.createElement('iframe');
+        frame.src = url;
+        document.body.shadowRoot.appendChild(frame);
+        await new Promise(x => frame.onload = x);
+      }, server.EMPTY_PAGE);
+      expect(page.frames().length).toBe(2);
+      expect(page.frames()[1].url()).toBe(server.EMPTY_PAGE);
+    });
     it('should report frame.name()', async({page, server}) => {
       await utils.attachFrame(page, 'theFrameId', server.EMPTY_PAGE);
       await page.evaluate(url => {
@@ -145,6 +192,20 @@ module.exports.addTests = function({testRunner, expect}) {
       expect(page.frames()[0].parentFrame()).toBe(null);
       expect(page.frames()[1].parentFrame()).toBe(page.mainFrame());
       expect(page.frames()[2].parentFrame()).toBe(page.mainFrame());
+    });
+    it('should report different frame instance when frame re-attaches', async({page, server}) => {
+      const frame1 = await utils.attachFrame(page, 'frame1', server.EMPTY_PAGE);
+      await page.evaluate(() => {
+        window.frame = document.querySelector('#frame1');
+        window.frame.remove();
+      });
+      expect(frame1.isDetached()).toBe(true);
+      const [frame2] = await Promise.all([
+        utils.waitEvent(page, 'frameattached'),
+        page.evaluate(() => document.body.appendChild(window.frame)),
+      ]);
+      expect(frame2.isDetached()).toBe(false);
+      expect(frame1).not.toBe(frame2);
     });
   });
 };
